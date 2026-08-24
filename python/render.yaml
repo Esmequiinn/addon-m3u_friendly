@@ -7,3 +7,11 @@ services:
     envVars:
       - key: PORT
         value: 7000
+      - key: TMDB_API_KEY
+        sync: false
+      - key: M3U_URLS
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        sync: false

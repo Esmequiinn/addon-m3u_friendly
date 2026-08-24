@@ -27,6 +27,27 @@ body {
   max-width: 480px;
 }
 
+.top-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.lang-btn {
+  background: #111;
+  border: 1px solid #222;
+  color: #888;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.lang-btn:hover { background: #1b1b1b; color: #fff; border-color: #333; }
+
 .header {
   display: flex;
   align-items: center;
@@ -288,16 +309,120 @@ textarea:focus, input:focus { border-color: #333; }
   display: none;
   margin-top: 10px;
 }
+
+.xtream-set {
+  border: 1px solid #1a1a1a;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.xtream-set-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.xtream-set-title {
+  font-size: 11px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.remove-set-btn {
+  background: none;
+  border: none;
+  color: #663333;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.remove-set-btn:hover { color: #e05a5a; }
+
+.add-set-btn {
+  width: 100%;
+  background: #111;
+  border: 1px dashed #2a2a2a;
+  color: #888;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  margin-bottom: 6px;
+}
+
+.add-set-btn:hover { border-color: #444; color: #fff; background: #161616; }
+
+.github-guide {
+  background: #0a0a0a;
+  border: 1px solid #1a1a1a;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.7;
+}
+
+.github-guide ol { margin-left: 18px; margin-top: 4px; }
+.github-guide summary { cursor: pointer; color: #888; font-weight: 600; user-select: none; }
+.github-guide summary:hover { color: #aaa; }
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  cursor: pointer;
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #6d28d9;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.checkbox-field .checkbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.checkbox-field .checkbox-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #cfcfcf;
+}
+
+.checkbox-field .checkbox-desc {
+  font-size: 12px;
+  color: #555;
+}
 </style>
 </head>
 <body>
 
 <div class="card">
+
+  <div class="top-bar">
+    <button class="lang-btn" id="langBtn" onclick="toggleLang()">Español</button>
+  </div>
+
   <div class="header">
     <div class="logo">M3U</div>
     <div>
       <h1>M3U IPTV</h1>
-      <p>Stremio Addon</p>
+      <p data-i18n="subtitle">Stremio Addon</p>
     </div>
   </div>
 
@@ -307,15 +432,15 @@ textarea:focus, input:focus { border-color: #333; }
   </div>
 
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('m3u')">M3U Playlist</button>
-    <button class="tab" onclick="switchTab('xtream')">Xtream Codes</button>
+    <button class="tab active" id="tabM3u" onclick="switchTab('m3u')" data-i18n="tabM3u">M3U Playlist</button>
+    <button class="tab" id="tabXtream" onclick="switchTab('xtream')" data-i18n="tabXtream">Xtream Codes</button>
   </div>
 
   <div class="panel active" id="panel-m3u">
     <div class="field">
-      <label>Playlist URL <span class="tag req">required</span></label>
-      <textarea id="m3uUrls" placeholder="https://yourprovider.com/playlist.m3u&#10;https://another-provider.com/list.m3u"></textarea>
-      <div class="example">
+      <label><span data-i18n="playlistUrlLabel">Playlist URL</span> <span class="tag req" data-i18n="required">required</span></label>
+      <textarea id="m3uUrls" data-i18n-placeholder="playlistPlaceholder" placeholder="https://yourprovider.com/playlist.m3u&#10;https://another-provider.com/list.m3u"></textarea>
+      <div class="example" data-i18n="playlistExample">
         One URL per line, or separated by commas<br><br>
         https://provider.com/get.php?username=john&amp;password=1234&amp;type=m3u_plus<br>
         https://iptv-service.com/john/mysecretpass/playlist.m3u
@@ -324,22 +449,9 @@ textarea:focus, input:focus { border-color: #333; }
   </div>
 
   <div class="panel" id="panel-xtream">
-    <div class="field">
-      <label>Server URL <span class="tag req">required</span></label>
-      <input type="url" id="xtreamServer" placeholder="http://yourprovider.com:8080">
-      <p class="hint">The server address your provider gave you — include the port if any.</p>
-    </div>
-    <div class="field row-2">
-      <div>
-        <label>Username <span class="tag req">required</span></label>
-        <input type="text" id="xtreamUser" placeholder="john123">
-      </div>
-      <div>
-        <label>Password <span class="tag req">required</span></label>
-        <input type="password" id="xtreamPass" placeholder="••••••••">
-      </div>
-    </div>
-    <div class="example">
+    <div id="xtreamSets"></div>
+    <button type="button" class="add-set-btn" onclick="addXtreamSet()" data-i18n="addAnotherList">+ Add another list</button>
+    <div class="example" data-i18n="xtreamExample">
       Your provider will give you these 3 things.<br>
       Example server: http://iptv-service.com:8080<br>
       The addon will build your M3U URL automatically.
@@ -348,43 +460,260 @@ textarea:focus, input:focus { border-color: #333; }
 
   <hr class="divider">
 
-  <p class="section-label">Optional — recommended</p>
+  <p class="section-label" data-i18n="optionalRecommended">Optional — recommended</p>
 
   <div class="field">
-    <label>TMDB API Key <span class="tag">optional</span></label>
-    <input type="password" id="tmdbKey" placeholder="e.g. a1b2c3d4e5f6...">
-    <p class="hint">
+    <label><span data-i18n="tmdbLabel">TMDB API Key</span> <span class="tag" data-i18n="optional">optional</span></label>
+    <input type="password" id="tmdbKey" data-i18n-placeholder="tmdbPlaceholder" placeholder="e.g. a1b2c3d4e5f6...">
+    <p class="hint" data-i18n="tmdbHint">
       Matches your content with Stremio's global catalog — posters, descriptions, ratings.
       Free key at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org</a>
     </p>
   </div>
 
-  <button class="btn" id="generateBtn" onclick="generate()">Generate install URL →</button>
+  <div class="field">
+    <label><span data-i18n="githubLabel">GitHub backup</span> <span class="tag" data-i18n="optional">optional</span></label>
+    <input type="text" id="githubRepo" data-i18n-placeholder="githubRepoPlaceholder" placeholder="e.g. yourusername/my-addon-data" style="margin-bottom: 8px;">
+    <input type="password" id="githubToken" data-i18n-placeholder="githubTokenPlaceholder" placeholder="GitHub token (ghp_...)">
+    <p class="hint" data-i18n="githubHint">
+      Saves your resolved titles to a GitHub repo so a restart doesn't have to start matching from zero.
+      Fully optional — without it the addon works exactly the same, it just re-matches everything after a restart.
+      Get a token at <a href="https://github.com/settings/tokens/new" target="_blank">github.com</a>
+    </p>
+    <details class="github-guide">
+      <summary data-i18n="githubGuideSummary">How do I get this?</summary>
+      <ol>
+        <li data-i18n="githubStep1">Create a small private repo on GitHub (any name works) — this is where the file with your resolved titles will live.</li>
+        <li data-i18n="githubStep2">Go to github.com/settings/tokens/new (the link above), give it any name, check the "repo" permission box, and generate it.</li>
+        <li data-i18n="githubStep3">Copy that token and paste it above, together with the repo name in "username/repo-name" format.</li>
+      </ol>
+    </details>
+  </div>
+
+  <hr class="divider">
+
+  <label class="checkbox-field" for="showChannels">
+    <input type="checkbox" id="showChannels">
+    <span class="checkbox-text">
+      <span class="checkbox-title" data-i18n="showChannelsTitle">Show TV channels</span>
+      <span class="checkbox-desc" data-i18n="showChannelsDesc">Off by default — only movies and series are shown. Turn this on to also get a "My Channels" catalog with the live TV channels from your list.</span>
+    </span>
+  </label>
+
+  <button class="btn" id="generateBtn" onclick="generate()" data-i18n="generateBtn">Generate install URL →</button>
   <div class="error" id="errorMsg"></div>
 
   <div class="result" id="result">
-    <p class="result-label">Your personal install URL</p>
+    <p class="result-label" data-i18n="resultLabel">Your personal install URL</p>
     <div class="url-row">
       <input type="text" id="manifestUrl" readonly>
-      <button id="copyBtn" onclick="copyUrl()">Copy</button>
+      <button id="copyBtn" onclick="copyUrl()" data-i18n="copyBtn">Copy</button>
     </div>
-    <a class="install" id="stremioLink" href="#">Open in Stremio</a>
+    <a class="install" id="stremioLink" href="#" data-i18n="openInStremio">Open in Stremio</a>
   </div>
 </div>
 
 <script>
+// ─────────────────────────────────────────────
+// TRADUCCIONES
+// El español va sin acentos a proposito, neutro
+// ─────────────────────────────────────────────
+const I18N = {
+  en: {
+    subtitle: "Stremio Addon",
+    tabM3u: "M3U Playlist",
+    tabXtream: "Xtream Codes",
+    required: "required",
+    optional: "optional",
+    playlistUrlLabel: "Playlist URL",
+    playlistPlaceholder: "https://yourprovider.com/playlist.m3u\nhttps://another-provider.com/list.m3u",
+    playlistExample: 'One URL per line, or separated by commas<br><br>https://provider.com/get.php?username=john&amp;password=1234&amp;type=m3u_plus<br>https://iptv-service.com/john/mysecretpass/playlist.m3u',
+    serverUrlLabel: "Server URL",
+    serverUrlPlaceholder: "http://yourprovider.com:8080",
+    serverUrlHint: "The server address your provider gave you — include the port if any.",
+    usernameLabel: "Username",
+    usernamePlaceholder: "john123",
+    passwordLabel: "Password",
+    addAnotherList: "+ Add another list",
+    xtreamSetTitle: "List",
+    xtreamExample: "Your provider will give you these 3 things.<br>Example server: http://iptv-service.com:8080<br>The addon will build your M3U URL automatically.",
+    optionalRecommended: "Optional — recommended",
+    tmdbLabel: "TMDB API Key",
+    tmdbPlaceholder: "e.g. a1b2c3d4e5f6...",
+    tmdbHint: 'Matches your content with Stremio\'s global catalog — posters, descriptions, ratings. Free key at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org</a>',
+    githubLabel: "GitHub backup",
+    githubRepoPlaceholder: "e.g. yourusername/my-addon-data",
+    githubTokenPlaceholder: "GitHub token (ghp_...)",
+    githubHint: 'Saves your resolved titles to a GitHub repo so a restart doesn\'t have to start matching from zero. Fully optional — without it the addon works exactly the same, it just re-matches everything after a restart. Get a token at <a href="https://github.com/settings/tokens/new" target="_blank">github.com</a>',
+    githubGuideSummary: "How do I get this?",
+    githubStep1: 'Create a small private repo on GitHub (any name works) — this is where the file with your resolved titles will live.',
+    githubStep2: 'Go to github.com/settings/tokens/new (the link above), give it any name, check the "repo" permission box, and generate it.',
+    githubStep3: 'Copy that token and paste it above, together with the repo name in "username/repo-name" format.',
+    showChannelsTitle: "Show TV channels",
+    showChannelsDesc: 'Off by default — only movies and series are shown. Turn this on to also get a "My Channels" catalog with the live TV channels from your list.',
+    generateBtn: "Generate install URL →",
+    generating: "Saving...",
+    resultLabel: "Your personal install URL",
+    copyBtn: "Copy",
+    copiedBtn: "Copied ✓",
+    openInStremio: "Open in Stremio",
+    errNoM3u: "Please enter at least one M3U URL.",
+    errNoValidUrls: "No valid URLs found. They must start with http:// or https://",
+    errNoServer: "Please enter the server URL in list",
+    errNoUser: "Please enter the username in list",
+    errNoPass: "Please enter the password in list",
+    errBadServer: "Server URL must start with http:// or https:// in list",
+    errServerError: "Something went wrong. Please try again.",
+    langToggle: "Español"
+  },
+  es: {
+    subtitle: "Addon de Stremio",
+    tabM3u: "Lista M3U",
+    tabXtream: "Xtream Codes",
+    required: "obligatorio",
+    optional: "opcional",
+    playlistUrlLabel: "URL de la lista",
+    playlistPlaceholder: "https://tuproveedor.com/playlist.m3u\nhttps://otroproveedor.com/lista.m3u",
+    playlistExample: 'Una URL por linea, o separadas por comas<br><br>https://proveedor.com/get.php?username=juan&amp;password=1234&amp;type=m3u_plus<br>https://servicio-iptv.com/juan/miclavesecreta/playlist.m3u',
+    serverUrlLabel: "URL del servidor",
+    serverUrlPlaceholder: "http://tuproveedor.com:8080",
+    serverUrlHint: "La direccion del servidor que te dio tu proveedor -- incluye el puerto si tiene.",
+    usernameLabel: "Usuario",
+    usernamePlaceholder: "juan123",
+    passwordLabel: "Contrasena",
+    addAnotherList: "+ Agregar otra lista",
+    xtreamSetTitle: "Lista",
+    xtreamExample: "Tu proveedor te va a dar estos 3 datos.<br>Ejemplo de servidor: http://servicio-iptv.com:8080<br>El addon arma tu URL M3U automaticamente.",
+    optionalRecommended: "Opcional -- recomendado",
+    tmdbLabel: "Clave de API de TMDB",
+    tmdbPlaceholder: "ej: a1b2c3d4e5f6...",
+    tmdbHint: 'Empareja tu contenido con el catalogo global de Stremio -- posters, descripciones, calificaciones. Clave gratis en <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org</a>',
+    githubLabel: "Respaldo en GitHub",
+    githubRepoPlaceholder: "ej: tuusuario/mi-repo-de-datos",
+    githubTokenPlaceholder: "Token de GitHub (ghp_...)",
+    githubHint: 'Guarda los titulos ya resueltos en un repositorio de GitHub, para que un reinicio no tenga que volver a buscar todo desde cero. Totalmente opcional -- sin esto el addon funciona exactamente igual, solo que vuelve a resolver todo despues de cada reinicio. Consigue un token en <a href="https://github.com/settings/tokens/new" target="_blank">github.com</a>',
+    githubGuideSummary: "Como consigo esto?",
+    githubStep1: 'Crea un repositorio chico y privado en GitHub (cualquier nombre sirve) -- ahi va a vivir el archivo con tus titulos ya resueltos.',
+    githubStep2: 'Anda a github.com/settings/tokens/new (el link de arriba), ponele cualquier nombre, marca el permiso "repo", y generalo.',
+    githubStep3: 'Copia ese token y pegalo arriba, junto con el nombre del repositorio en formato "usuario/nombre-repo".',
+    showChannelsTitle: "Mostrar canales de tv",
+    showChannelsDesc: 'Apagado por defecto -- solo se muestran peliculas y series. Activalo para tener ademas un catalogo "Mis Canales" con los canales de tv en vivo de tu lista.',
+    generateBtn: "Generar URL de instalacion →",
+    generating: "Guardando...",
+    resultLabel: "Tu URL personal de instalacion",
+    copyBtn: "Copiar",
+    copiedBtn: "Copiado ✓",
+    openInStremio: "Abrir en Stremio",
+    errNoM3u: "Ingresa al menos una URL M3U.",
+    errNoValidUrls: "No se encontraron URLs validas. Tienen que empezar con http:// o https://",
+    errNoServer: "Falta la URL del servidor en la lista",
+    errNoUser: "Falta el usuario en la lista",
+    errNoPass: "Falta la contrasena en la lista",
+    errBadServer: "La URL del servidor tiene que empezar con http:// o https:// en la lista",
+    errServerError: "Algo salio mal. Intenta de nuevo.",
+    langToggle: "English"
+  }
+};
+
+let currentLang = 'en';
+
+function applyLang(lang) {
+  currentLang = lang;
+  const dict = I18N[lang];
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (dict[key] !== undefined) el.innerHTML = dict[key];
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (dict[key] !== undefined) el.placeholder = dict[key];
+  });
+  document.querySelectorAll('.xtream-set-title').forEach((el, i) => {
+    el.textContent = `${dict.xtreamSetTitle} ${i + 1}`;
+  });
+  document.getElementById('langBtn').textContent = dict.langToggle;
+  document.documentElement.lang = lang;
+}
+
+function toggleLang() {
+  applyLang(currentLang === 'en' ? 'es' : 'en');
+}
+
+// ─────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────
 let activeTab = 'm3u';
 
 function switchTab(tab) {
   activeTab = tab;
-  document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', (i === 0 && tab === 'm3u') || (i === 1 && tab === 'xtream'));
-  });
+  document.getElementById('tabM3u').classList.toggle('active', tab === 'm3u');
+  document.getElementById('tabXtream').classList.toggle('active', tab === 'xtream');
   document.getElementById('panel-m3u').classList.toggle('active', tab === 'm3u');
   document.getElementById('panel-xtream').classList.toggle('active', tab === 'xtream');
   document.getElementById('errorMsg').style.display = 'none';
   document.getElementById('result').style.display = 'none';
 }
+
+// ─────────────────────────────────────────────
+// XTREAM — varias listas, con un + para agregar mas
+// ─────────────────────────────────────────────
+let xtreamSetCount = 0;
+
+function addXtreamSet() {
+  xtreamSetCount++;
+  const id = xtreamSetCount;
+  const dict = I18N[currentLang];
+  const wrapper = document.createElement('div');
+  wrapper.className = 'xtream-set';
+  wrapper.id = `xtreamSet-${id}`;
+  wrapper.innerHTML = `
+    <div class="xtream-set-header">
+      <span class="xtream-set-title">${dict.xtreamSetTitle} ${id}</span>
+      <button type="button" class="remove-set-btn" onclick="removeXtreamSet(${id})">×</button>
+    </div>
+    <div class="field" style="margin-bottom: 10px;">
+      <label><span data-i18n="serverUrlLabel">${dict.serverUrlLabel}</span> <span class="tag req" data-i18n="required">${dict.required}</span></label>
+      <input type="url" class="xt-server" data-i18n-placeholder="serverUrlPlaceholder" placeholder="${dict.serverUrlPlaceholder}">
+    </div>
+    <div class="field row-2" style="margin-bottom: 0;">
+      <div>
+        <label><span data-i18n="usernameLabel">${dict.usernameLabel}</span> <span class="tag req" data-i18n="required">${dict.required}</span></label>
+        <input type="text" class="xt-user" data-i18n-placeholder="usernamePlaceholder" placeholder="${dict.usernamePlaceholder}">
+      </div>
+      <div>
+        <label><span data-i18n="passwordLabel">${dict.passwordLabel}</span> <span class="tag req" data-i18n="required">${dict.required}</span></label>
+        <input type="password" class="xt-pass" placeholder="••••••••">
+      </div>
+    </div>
+  `;
+  document.getElementById('xtreamSets').appendChild(wrapper);
+  updateRemoveButtons();
+}
+
+function removeXtreamSet(id) {
+  const el = document.getElementById(`xtreamSet-${id}`);
+  if (el) el.remove();
+  renumberXtreamSets();
+  updateRemoveButtons();
+}
+
+function renumberXtreamSets() {
+  const dict = I18N[currentLang];
+  document.querySelectorAll('.xtream-set-title').forEach((el, i) => {
+    el.textContent = `${dict.xtreamSetTitle} ${i + 1}`;
+  });
+}
+
+function updateRemoveButtons() {
+  // no dejamos sacar la ultima lista que queda -- siempre tiene que haber al menos una
+  const sets = document.querySelectorAll('.xtream-set');
+  sets.forEach(s => {
+    const btn = s.querySelector('.remove-set-btn');
+    btn.style.visibility = sets.length > 1 ? 'visible' : 'hidden';
+  });
+}
+
+addXtreamSet(); // arranca con una lista lista para llenar
 
 function showError(msg) {
   const el = document.getElementById('errorMsg');
@@ -393,37 +722,50 @@ function showError(msg) {
 }
 
 async function generate() {
+  const dict = I18N[currentLang];
   document.getElementById('errorMsg').style.display = 'none';
   document.getElementById('result').style.display = 'none';
 
-  const tmdbKey = document.getElementById('tmdbKey').value.trim();
+  const tmdbKey     = document.getElementById('tmdbKey').value.trim();
+  const githubToken = document.getElementById('githubToken').value.trim();
+  const githubRepo  = document.getElementById('githubRepo').value.trim();
+  const showChannels = document.getElementById('showChannels').checked;
   let m3uUrls = [];
 
   if (activeTab === 'm3u') {
     const raw = document.getElementById('m3uUrls').value.trim();
-    if (!raw) return showError('Please enter at least one M3U URL.');
+    if (!raw) return showError(dict.errNoM3u);
     m3uUrls = raw.split(/[\n,]+/).map(u => u.trim()).filter(u => u.startsWith('http'));
-    if (!m3uUrls.length) return showError('No valid URLs found. They must start with http:// or https://');
+    if (!m3uUrls.length) return showError(dict.errNoValidUrls);
   } else {
-    const server = document.getElementById('xtreamServer').value.trim().replace(/\/$/, '');
-    const user   = document.getElementById('xtreamUser').value.trim();
-    const pass   = document.getElementById('xtreamPass').value.trim();
-    if (!server) return showError('Please enter the server URL.');
-    if (!user)   return showError('Please enter your username.');
-    if (!pass)   return showError('Please enter your password.');
-    if (!server.startsWith('http')) return showError('Server URL must start with http:// or https://');
-    m3uUrls = [`${server}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=ts`];
+    const sets = document.querySelectorAll('.xtream-set');
+    for (let i = 0; i < sets.length; i++) {
+      const server = sets[i].querySelector('.xt-server').value.trim().replace(/\/$/, '');
+      const user   = sets[i].querySelector('.xt-user').value.trim();
+      const pass   = sets[i].querySelector('.xt-pass').value.trim();
+      if (!server) return showError(`${dict.errNoServer} ${i + 1}`);
+      if (!user)   return showError(`${dict.errNoUser} ${i + 1}`);
+      if (!pass)   return showError(`${dict.errNoPass} ${i + 1}`);
+      if (!server.startsWith('http')) return showError(`${dict.errBadServer} ${i + 1}`);
+      m3uUrls.push(`${server}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=ts`);
+    }
   }
 
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
-  btn.textContent = 'Saving...';
+  btn.textContent = dict.generating;
 
   try {
     const res = await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ m3uUrls, tmdbApiKey: tmdbKey || undefined })
+      body: JSON.stringify({
+        m3uUrls,
+        tmdbApiKey: tmdbKey || undefined,
+        githubToken: githubToken || undefined,
+        githubRepo: githubRepo || undefined,
+        showChannels: showChannels || undefined
+      })
     });
 
     if (!res.ok) throw new Error('Server error');
@@ -436,20 +778,21 @@ async function generate() {
     document.getElementById('result').style.display = 'block';
     document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
   } catch (err) {
-    showError('Something went wrong. Please try again.');
+    showError(dict.errServerError);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Generate install URL →';
+    btn.textContent = dict.generateBtn;
   }
 }
 
 function copyUrl() {
   const input = document.getElementById('manifestUrl');
+  const dict = I18N[currentLang];
   input.select();
   navigator.clipboard.writeText(input.value).then(() => {
     const btn = document.getElementById('copyBtn');
-    btn.textContent = 'Copied ✓';
-    setTimeout(() => btn.textContent = 'Copy', 2000);
+    btn.textContent = dict.copiedBtn;
+    setTimeout(() => btn.textContent = dict.copyBtn, 2000);
   });
 }
 </script>
