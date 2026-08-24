@@ -9,3 +9,9 @@ services:
         sync: false
       - key: M3U_URLS
         sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_REPO
+        sync: false
+      - key: SHOW_CHANNELS
+        sync: false
