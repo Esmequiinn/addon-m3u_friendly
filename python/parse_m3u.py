@@ -3,14 +3,13 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Optional
 
-# Episodio admite hasta 3 digitos (E001 a E999) -- con solo 2 digitos una
-# serie larga (Dragon Ball Super, novelas) que pasa el episodio 99 se leia
-# mal: E100 se tomaba como "10" y el digito sobrante quedaba pegado al titulo
+
+
 SEASON_EP_RE = re.compile(
-    r"(?:[Ss](\d{1,2})\s*[Ee](\d{1,3}))"                       # S01E01 / S01 E01
-    r"|(?:[Tt](\d{1,2})\s*[Ee](\d{1,3}))"                      # T01E01 (español)
-    r"|(?:(?<!\d)(\d{1,2})x(\d{1,3})(?!\d))"                   # 1x01 / 01x01 (sin confundir con resoluciones tipo 1920x1080)
-    r"|(?:temporada\s*(\d{1,2})\s*(?:episodio|ep|cap[íi]tulo|cap)\.?\s*(\d{1,3}))",  # Temporada 1 Episodio 1
+    r"(?:[Ss](\d{1,2})\s*[Ee](\d{1,3}))"
+    r"|(?:[Tt](\d{1,2})\s*[Ee](\d{1,3}))"
+    r"|(?:(?<!\d)(\d{1,2})x(\d{1,3})(?!\d))"
+    r"|(?:temporada\s*(\d{1,2})\s*(?:episodio|ep|cap[íi]tulo|cap)\.?\s*(\d{1,3}))",
     re.IGNORECASE,
 )
 
@@ -108,8 +107,8 @@ class Channel:
 
 
 def slugify(s: str) -> str:
-    # normalizar acentos antes de tirar lo que no es a-z0-9_ -- sin esto
-    # "Teoría" quedaba "tera" (la i desaparecia entera, no solo la tilde)
+
+
     s = unicodedata.normalize("NFD", s.lower())
     s = "".join(c for c in s if unicodedata.category(c) != "Mn")
     return re.sub(r"[^a-z0-9_]", "", s.replace(" ", "_"))[:60]
@@ -124,12 +123,12 @@ def clean_title(s: str = "") -> str:
     s = re.sub(r'tvg-[a-z-]+="[^"]*"', "", s, flags=re.IGNORECASE)
     s = re.sub(r'group-title="[^"]*"', "", s, flags=re.IGNORECASE)
     s = re.sub(r'[a-z-]+="[^"]*"', "", s, flags=re.IGNORECASE)
-    # tamaño de archivo pegado al titulo, ej "· 📦 1.41 GB"
+
     s = re.sub(r"\s*[·|]?\s*📦\s*[\d.,]+\s*(?:B|KB|MB|GB|TB)\b", "", s, flags=re.IGNORECASE)
-    s = re.sub(r"\b(19|20)\d{2}\b", lambda m: f"__YEAR_{m.group()}__", s)  # preservar año temporalmente
-    # puntos entre letras ("Spider-Man.No.Way.Home") y entre letra y numero
-    # ("Chapter.1.(2014)") -- no toca puntos entre dos numeros (no rompe un
-    # decimal como "5.3" de bitrate)
+    s = re.sub(r"\b(19|20)\d{2}\b", lambda m: f"__YEAR_{m.group()}__", s)
+
+
+
     s = re.sub(r"(?<=[a-zA-Z])\.(?=[a-zA-Z0-9(\[])", " ", s)
     s = re.sub(r"1080p|720p|2160p|4k|hdr|webrip|bluray|x264|x265|hevc|avc", "", s, flags=re.IGNORECASE)
     s = re.sub(r"\b(bdrip|brrip|hdrip|dvdrip|hdtv|remux|extended|imax)\b", "", s, flags=re.IGNORECASE)
@@ -141,17 +140,17 @@ def clean_title(s: str = "") -> str:
     s = re.sub(r"[\d.,]+\s*gb\b", "", s, flags=re.IGNORECASE)
     s = re.sub(r"latino|castellano|cast\b|espa[ñn]ol|japon[eé]s|ingl[eé]s|multi\b|dual|subtitulado|sub\b", "", s, flags=re.IGNORECASE)
     s = re.sub(r"\b(lat|esp|spa|eng|jpn|jap)\b", "", s, flags=re.IGNORECASE)
-    # genero pegado al final del titulo por el proveedor -- sin esto el
-    # titulo real nunca matcheaba exacto contra TMDB ("hoppers" vs "hoppers animacion")
+
+
     s = re.sub(
         r"\b(animaci[oó]n|acci[oó]n|comedia|terror|drama|suspenso|aventura|fantas[ií]a|"
         r"ciencia\s*ficci[oó]n|romance|documental|anime|musical|b[eé]lica|crimen|misterio|"
         r"thriller|western|biograf[ií]a|familiar|infantil)\b",
         "", s, flags=re.IGNORECASE,
     )
-    s = re.sub(r"__YEAR_(\d{4})__", r"\1", s)  # restaurar año
-    s = re.sub(r"\[[\s,]*\]", "", s)  # corchetes vacios que quedaron tras limpiar
-    s = re.sub(r"\([\s,]*\)", "", s)  # idem parentesis
+    s = re.sub(r"__YEAR_(\d{4})__", r"\1", s)
+    s = re.sub(r"\[[\s,]*\]", "", s)
+    s = re.sub(r"\([\s,]*\)", "", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -166,10 +165,7 @@ def has_year(s: str) -> bool:
     return bool(re.search(r"\b(19[5-9]\d|20[0-2]\d)\b", s))
 
 
-# Señal estructural de Xtream (no depende de adivinar palabras del grupo,
-# que varian sin limite entre proveedores) -- los VOD siempre tienen
-# "/movie/" o "/series/" en el path, un canal en vivo termina en el numero
-# de stream pelado sin extension
+
 def es_url_de_canal_en_vivo(url: Optional[str]) -> bool:
     if not url:
         return False
@@ -187,7 +183,7 @@ def pad(n: int) -> str:
     return str(n).zfill(2)
 
 
-# PARSE
+
 def parse_extinf(line: str) -> M3UItem:
     title_match = re.search(r",(.+)$", line)
     title = title_match.group(1).strip() if title_match else "Sin título"
@@ -219,36 +215,39 @@ def parse_m3u(raw: str) -> list[M3UItem]:
     return items
 
 
-# CLASSIFY
+def contiene_palabra(texto, palabras):
+    for palabra in palabras:
+        if re.search(rf"\b{re.escape(palabra)}\b", texto):
+            return True
+    return False
+
+
 def classify_item(item: M3UItem):
     group_low = item.group.lower()
     title_low = (item.title + " " + item.tvg_name).lower()
 
-    # Descarte por título o grupo — tiene prioridad sobre todo
-    if any(kw in title_low for kw in DISCARD_TITLE_KEYWORDS):
+    if contiene_palabra(title_low, DISCARD_TITLE_KEYWORDS):
         return "channel", None
-    if any(kw in group_low for kw in DISCARD_GROUP_KEYWORDS):
+    if contiene_palabra(group_low, DISCARD_GROUP_KEYWORDS):
         return "channel", None
 
     ep_match = SEASON_EP_RE.search(item.title) or SEASON_EP_RE.search(item.tvg_name)
     if ep_match:
         return "series", ep_match
 
-    # Ya viene con tvg-id de IMDb -- pelicula confirmada, no hace falta
-    # adivinar por grupo/año/url
     if item.tvg_id and item.tvg_id.startswith("tt"):
         return "movie", None
 
     if es_url_de_canal_en_vivo(item.url):
         return "channel", None
 
-    if any(kw in group_low for kw in CHANNEL_GROUP_KEYWORDS):
+    if contiene_palabra(group_low, CHANNEL_GROUP_KEYWORDS):
         return "channel", None
 
-    if any(kw in group_low for kw in SERIES_GROUP_KEYWORDS):
+    if contiene_palabra(group_low, SERIES_GROUP_KEYWORDS):
         return "series", None
 
-    if any(kw in group_low for kw in MOVIE_GROUP_KEYWORDS):
+    if contiene_palabra(group_low, MOVIE_GROUP_KEYWORDS):
         return "movie", None
 
     all_text = f"{item.title} {item.tvg_name} {item.group}".lower()
@@ -264,7 +263,7 @@ def classify_item(item: M3UItem):
     return "unknown", None
 
 
-# GROUP
+
 def group_content(items: list[M3UItem]) -> dict:
     movies_map: dict[str, Movie] = {}
     series_map: dict[str, Series] = {}
@@ -276,14 +275,9 @@ def group_content(items: list[M3UItem]) -> dict:
         content_type, se_match = classify_item(item)
 
         if content_type == "channel":
-            # Se agrupan igual que las peliculas (mismo canal, varias
-            # listas -> un item con varias opciones de stream) -- pero
-            # por defecto esto NO se muestra en ningun catalogo, se
-            # descarta en addon.py salvo que el usuario active "mostrar
-            # canales de tv" al configurar. Se arma siempre igual (es
-            # barato, ya se esta recorriendo el item) para que
-            # activar/desactivar la casilla no requiera volver a bajar
-            # ni reprocesar las listas.
+
+
+
             channel_id = item.tvg_id or slugify(item.tvg_name or item.title)
             if channel_id not in channels_map:
                 channels_map[channel_id] = Channel(
@@ -299,10 +293,8 @@ def group_content(items: list[M3UItem]) -> dict:
             count_unknown += 1
             continue
 
-        # Si algo se detecto como serie pero no se le pudo sacar
-        # temporada/episodio del titulo, no hay forma segura de ubicarlo --
-        # antes esto caia por descarte a peliculas, mezclando episodios
-        # sueltos con una pelicula que se llame igual
+
+
         if content_type == "series" and not se_match:
             count_serie_sin_match += 1
             continue
