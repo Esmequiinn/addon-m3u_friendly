@@ -6,7 +6,7 @@ const dns     = require("dns");
 const http    = require("http");
 const https   = require("https");
 const axios   = require("axios");
-const { parseM3U, groupContent, cleanTitleForTMDB } = require("./parse-m3u");
+const { parseM3U, groupContent, cleanTitleForTMDB, classifyItem } = require("./parse-m3u");
 
 const app  = express();
 const PORT = process.env.PORT || 7000;
@@ -18,20 +18,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Algunos hosts publican IPv4 e IPv6 a la vez, y en ciertos entornos (Render,
-// Oracle) la salida por IPv6 no funciona de verdad -- Node intenta esa
-// primero por defecto y se queda esperando ahi antes de probar la IPv4, que
-// si anda. Esto fuerza siempre IPv4.
 function lookupIPv4(hostname, options, callback) {
   return dns.lookup(hostname, { ...options, family: 4 }, callback);
 }
 axios.defaults.httpAgent  = new http.Agent({ keepAlive: true, lookup: lookupIPv4 });
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: true, lookup: lookupIPv4 });
 
-// ─────────────────────────────────────────────
-// CONFIG STORE — persiste en disco
-// Sobrevive reinicios de Render
-// ─────────────────────────────────────────────
 
 const CONFIG_FILE = path.join(__dirname, "configs.json");
 
@@ -74,17 +66,31 @@ function getConfig(id) {
   return configStore.get(id) || null;
 }
 
-let globalData = {
-  movies:          [],
-  series:          {},
-  channels:        [],
-  tmdbCache:       {},
-  movieImdbIndex:  {},
-  seriesImdbIndex: {},
-  apiKey:          null,
-  configId:        null,
-  ready:           false
-};
+
+const OVERRIDES_FILE = path.join(__dirname, "overrides.json");
+
+function loadOverridesStore() {
+  try {
+    if (fs.existsSync(OVERRIDES_FILE)) {
+      const data = JSON.parse(fs.readFileSync(OVERRIDES_FILE, "utf8"));
+      console.log(`📂 Overrides cargados para ${Object.keys(data).length} config(s)`);
+      return data;
+    }
+  } catch (err) {
+    console.error("❌ Error cargando overrides desde disco:", err.message);
+  }
+  return {};
+}
+
+function persistOverridesStore() {
+  try {
+    fs.writeFileSync(OVERRIDES_FILE, JSON.stringify(overridesStore, null, 2), "utf8");
+  } catch (err) {
+    console.error("❌ Error guardando overrides en disco:", err.message);
+  }
+}
+
+const overridesStore = loadOverridesStore();
 
 function normalize(str = "") {
   return str
@@ -100,25 +106,46 @@ function normalize(str = "") {
     .trim();
 }
 
+function guardarOverride(configId, tipo, titulo, imdbId) {
+  if (!overridesStore[configId]) overridesStore[configId] = {};
+  const key = `${tipo}:${normalize(titulo)}`;
+  overridesStore[configId][key] = { tipo, titulo, imdbId };
+  persistOverridesStore();
+}
+
+function aplicarOverrides(entry) {
+  const overrides = overridesStore[entry.configId];
+  if (!overrides) return;
+  for (const key of Object.keys(overrides)) {
+    const { tipo, titulo, imdbId } = overrides[key];
+    if (tipo === "movie") {
+      const movie = entry.movies.find(m => normalize(m.title) === normalize(titulo));
+      if (movie) { entry.movieImdbIndex[imdbId] = movie.id; movie.id = imdbId; }
+    } else {
+      const showKey = Object.keys(entry.series).find(
+        k => normalize(entry.series[k].title) === normalize(titulo)
+      );
+      if (showKey) {
+        const show = entry.series[showKey];
+        entry.seriesImdbIndex[imdbId] = show.id;
+        show.id = imdbId;
+      }
+    }
+  }
+}
+
+
+const dataStore = new Map();
+
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// ─────────────────────────────────────────────
-// CACHE TMDB EN GITHUB (opcional)
-// Si el usuario cargo un token + repo desde /configure, el resultado de
-// resolver cada titulo contra TMDB se guarda ahi ademas de en memoria. Sin
-// esto, cada vez que Render duerme el contenedor (plan gratis, se recicla
-// solo con inactividad) el progreso se pierde entero y hay que volver a
-// resolver todo desde cero contra la API de TMDB, lo que en listas grandes
-// puede tardar bastante. Es enteramente opcional -- sin token configurado,
-// el addon funciona exactamente igual que antes, solo que sin sobrevivir
-// a un reinicio.
-// ─────────────────────────────────────────────
 
 const GITHUB_CACHE_PATH = "tmdb-cache.json";
-let githubCacheSha = null;
-let githubSavePromise = null;
+
+const githubCacheShaPorRepo = new Map();
+const githubSavePromisePorRepo = new Map();
 
 async function loadTmdbCacheFromGithub(token, repo) {
   if (!token || !repo) return {};
@@ -127,18 +154,18 @@ async function loadTmdbCacheFromGithub(token, repo) {
       `https://api.github.com/repos/${repo}/contents/${GITHUB_CACHE_PATH}`,
       { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }, timeout: 15000 }
     );
-    githubCacheSha = res.data.sha;
+    githubCacheShaPorRepo.set(repo, res.data.sha);
     const contenido = Buffer.from(res.data.content, "base64").toString("utf8");
     const datos = JSON.parse(contenido);
     if (datos && typeof datos === "object") {
-      console.log(`📦 ${Object.keys(datos).length} resoluciones TMDB cargadas desde GitHub`);
+      console.log(`📦 ${Object.keys(datos).length} resoluciones TMDB cargadas desde GitHub (${repo})`);
       return datos;
     }
   } catch (err) {
     if (err.response?.status === 404) {
-      console.log("📦 Todavia no existe tmdb-cache.json en el repo, arranca vacio");
+      console.log(`📦 Todavia no existe tmdb-cache.json en ${repo}, arranca vacio`);
     } else {
-      console.warn("⚠️ No se pudo cargar el cache de GitHub:", err.message);
+      console.warn(`⚠️ No se pudo cargar el cache de GitHub (${repo}):`, err.message);
     }
   }
   return {};
@@ -146,53 +173,51 @@ async function loadTmdbCacheFromGithub(token, repo) {
 
 async function saveTmdbCacheToGithub(token, repo, cache) {
   if (!token || !repo) return;
-  // si ya hay un guardado en curso, este se engancha al mismo en vez de
-  // mandar otro pedido en paralelo con un sha desactualizado
-  if (githubSavePromise) return githubSavePromise;
-  githubSavePromise = (async () => {
+  if (githubSavePromisePorRepo.has(repo)) return githubSavePromisePorRepo.get(repo);
+  const promesa = (async () => {
     try {
       const contenidoB64 = Buffer.from(JSON.stringify(cache), "utf8").toString("base64");
+      const shaActual = githubCacheShaPorRepo.get(repo);
       const res = await axios.put(
         `https://api.github.com/repos/${repo}/contents/${GITHUB_CACHE_PATH}`,
         {
           message: `Actualizar cache TMDB (${Object.keys(cache).length} entradas)`,
           content: contenidoB64,
-          ...(githubCacheSha ? { sha: githubCacheSha } : {})
+          ...(shaActual ? { sha: shaActual } : {})
         },
         { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }, timeout: 20000 }
       );
-      githubCacheSha = res.data.content.sha;
-      console.log(`📦 Cache TMDB guardado en GitHub (${Object.keys(cache).length} entradas)`);
+      githubCacheShaPorRepo.set(repo, res.data.content.sha);
+      console.log(`📦 Cache TMDB guardado en GitHub (${repo}, ${Object.keys(cache).length} entradas)`);
     } catch (err) {
       if (err.response?.status === 409) {
-        // el archivo cambio del lado de GitHub desde la ultima vez que
-        // leimos el sha -- se refresca y se reintenta una vez
         try {
           const fresh = await axios.get(
             `https://api.github.com/repos/${repo}/contents/${GITHUB_CACHE_PATH}`,
             { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }, timeout: 15000 }
           );
-          githubCacheSha = fresh.data.sha;
+          githubCacheShaPorRepo.set(repo, fresh.data.sha);
           const contenidoB64 = Buffer.from(JSON.stringify(cache), "utf8").toString("base64");
           const res2 = await axios.put(
             `https://api.github.com/repos/${repo}/contents/${GITHUB_CACHE_PATH}`,
-            { message: `Actualizar cache TMDB (${Object.keys(cache).length} entradas)`, content: contenidoB64, sha: githubCacheSha },
+            { message: `Actualizar cache TMDB (${Object.keys(cache).length} entradas)`, content: contenidoB64, sha: githubCacheShaPorRepo.get(repo) },
             { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" }, timeout: 20000 }
           );
-          githubCacheSha = res2.data.content.sha;
-          console.log(`📦 Cache TMDB guardado en GitHub tras reintento`);
+          githubCacheShaPorRepo.set(repo, res2.data.content.sha);
+          console.log(`📦 Cache TMDB guardado en GitHub tras reintento (${repo})`);
         } catch (err2) {
-          console.warn("⚠️ No se pudo guardar el cache en GitHub ni tras reintentar:", err2.message);
+          console.warn(`⚠️ No se pudo guardar el cache en GitHub ni tras reintentar (${repo}):`, err2.message);
         }
       } else {
-        console.warn("⚠️ No se pudo guardar el cache en GitHub:", err.message);
+        console.warn(`⚠️ No se pudo guardar el cache en GitHub (${repo}):`, err.message);
       }
     }
   })();
+  githubSavePromisePorRepo.set(repo, promesa);
   try {
-    await githubSavePromise;
+    await promesa;
   } finally {
-    githubSavePromise = null;
+    githubSavePromisePorRepo.delete(repo);
   }
 }
 
@@ -226,25 +251,21 @@ function chunks(arr, size) {
   return result;
 }
 
-async function prefetchTMDB(data) {
-  const { movies, series, tmdbCache, movieImdbIndex, seriesImdbIndex, apiKey, githubToken, githubRepo } = data;
+async function prefetchTMDB(entry) {
+  const { movies, series, tmdbCache, movieImdbIndex, seriesImdbIndex, apiKey, githubToken, githubRepo, configId } = entry;
   if (!apiKey) return;
 
   const movieList  = movies.filter(m => !m.id.startsWith("tt"));
   const seriesList = Object.values(series).filter(s => !s.id.startsWith("tt"));
 
-  console.log(`⏳ Pre-carga TMDB iniciada`);
-  console.log(`🎬 ${movieList.length} películas`);
-  console.log(`📺 ${seriesList.length} series`);
+  console.log(`⏳ [${configId}] Pre-carga TMDB iniciada`);
+  console.log(`🎬 [${configId}] ${movieList.length} películas`);
+  console.log(`📺 [${configId}] ${seriesList.length} series`);
 
   let resolvedMovies = 0;
   let resolvedSeries = 0;
   let entriesSinceLastSave = 0;
 
-  // Si esta configurado el guardado en GitHub, se guarda cada tanto durante
-  // la resolucion (no solo al final) -- para listas grandes esto puede
-  // tardar bastante, y sin esto un reinicio a mitad de camino perdia todo
-  // el progreso acumulado hasta ese punto.
   async function guardarSiCorresponde() {
     if (!githubToken || !githubRepo) return;
     entriesSinceLastSave++;
@@ -255,32 +276,34 @@ async function prefetchTMDB(data) {
   }
 
   for (const batch of chunks(movieList, 4)) {
+    if (dataStore.get(configId) !== entry) return;
     await Promise.all(batch.map(async movie => {
       try {
         const imdb = await searchTMDB(movie.title, "movie", tmdbCache, apiKey);
         if (imdb) { movieImdbIndex[imdb] = movie.id; movie.id = imdb; resolvedMovies++; }
         await guardarSiCorresponde();
       } catch (err) {
-        console.error(`❌ TMDB movie error: ${movie.title}`);
+        console.error(`❌ [${configId}] TMDB movie error: ${movie.title}`);
       }
     }));
-    console.log(`🎬 Películas resueltas: ${resolvedMovies}/${movieList.length}`);
+    console.log(`🎬 [${configId}] Películas resueltas: ${resolvedMovies}/${movieList.length}`);
     await sleep(400);
   }
 
-  console.log(`✅ Películas terminadas`);
+  console.log(`✅ [${configId}] Películas terminadas`);
 
   for (const batch of chunks(seriesList, 4)) {
+    if (dataStore.get(configId) !== entry) return;
     await Promise.all(batch.map(async show => {
       try {
         const imdb = await searchTMDB(show.title, "series", tmdbCache, apiKey);
         if (imdb) { seriesImdbIndex[imdb] = show.id; show.id = imdb; resolvedSeries++; }
         await guardarSiCorresponde();
       } catch (err) {
-        console.error(`❌ TMDB series error: ${show.title}`);
+        console.error(`❌ [${configId}] TMDB series error: ${show.title}`);
       }
     }));
-    console.log(`📺 Series resueltas: ${resolvedSeries}/${seriesList.length}`);
+    console.log(`📺 [${configId}] Series resueltas: ${resolvedSeries}/${seriesList.length}`);
     await sleep(400);
   }
 
@@ -288,20 +311,15 @@ async function prefetchTMDB(data) {
     await saveTmdbCacheToGithub(githubToken, githubRepo, tmdbCache);
   }
 
-  console.log(`✅ Pre-carga TMDB completada`);
+  console.log(`✅ [${configId}] Pre-carga TMDB completada`);
 }
 
-// Descarga con reintentos -- si el servidor Xtream esta lento o de mal humor
-// un rato, antes de darse por vencido prueba un par de veces mas con una
-// espera creciente entre intento e intento
 async function descargarConReintentos(url, intentos = 3) {
   let ultimoError;
   for (let i = 0; i < intentos; i++) {
     try {
       return await axios.get(url, { timeout: 30000, responseType: "text" });
     } catch (e) {
-      // algunos proveedores tienen certificados mal armados -- se reintenta
-      // una vez sin validar el certificado antes de tirar la toalla
       const esErrorCert = /certificate|SSL|TLS/i.test(e.message || "");
       if (esErrorCert) {
         try {
@@ -334,28 +352,33 @@ function conTechoDeTiempo(promise, ms, etiqueta) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(venceTimer));
 }
 
-async function loadList(m3uUrls) {
-  let allItems = [];
-  const DESCARGA_TIMEOUT_MAX_MS = 150000; // 2.5 min, red de seguridad por si una lista se cuelga de verdad
+const DESCARGA_TIMEOUT_MAX_MS = 150000;
 
-  // Descarga en paralelo, no una por una -- con varias listas (Xtream +
-  // M3U propio, por ejemplo) una sola lenta ya no bloquea a las demas
-  const resultados = await Promise.allSettled(m3uUrls.map(async url => {
-    console.log(`📥 Descargando: ${url}`);
-    const res = await conTechoDeTiempo(descargarConReintentos(url), DESCARGA_TIMEOUT_MAX_MS, url);
-    const items = parseM3U(res.data);
-    console.log(`📺 ${items.length} items encontrados en ${url}`);
-    return items;
-  }));
+async function descargarYParsear(url) {
+  console.log(`📥 Descargando: ${url}`);
+  const res = await conTechoDeTiempo(descargarConReintentos(url), DESCARGA_TIMEOUT_MAX_MS, url);
+  const items = parseM3U(res.data);
+  console.log(`📺 ${items.length} items encontrados en ${url}`);
+  return items;
+}
 
+async function descargarTodasLasListas(m3uUrls) {
+  const itemsPorUrl = {};
+  const resultados = await Promise.allSettled(
+    m3uUrls.map(async url => ({ url, items: await descargarYParsear(url) }))
+  );
   for (const r of resultados) {
     if (r.status === "fulfilled") {
-      allItems = allItems.concat(r.value);
+      itemsPorUrl[r.value.url] = r.value.items;
     } else {
       console.error(`❌ Error descargando una lista:`, r.reason?.message || r.reason);
     }
   }
+  return itemsPorUrl;
+}
 
+function reagrupar(itemsPorUrl) {
+  const allItems = Object.values(itemsPorUrl).flat();
   console.log(`📦 Total acumulado: ${allItems.length}`);
   console.log(`🧩 Agrupando contenido...`);
   const grouped = groupContent(allItems);
@@ -365,18 +388,25 @@ async function loadList(m3uUrls) {
 }
 
 async function initData(config, configId) {
-  console.log(`🔄 Cargando listas...`);
-  globalData.ready = false;
+  console.log(`🔄 [${configId}] Cargando listas...`);
 
   const githubToken = config.githubToken || null;
   const githubRepo  = config.githubRepo || null;
 
-  const [{ movies, series, channels }, tmdbCacheGuardado] = await Promise.all([
-    loadList(config.m3uUrls),
+  const [itemsPorUrl, tmdbCacheGuardado] = await Promise.all([
+    descargarTodasLasListas(config.m3uUrls),
     loadTmdbCacheFromGithub(githubToken, githubRepo)
   ]);
 
-  globalData = {
+  const { movies, series, channels } = reagrupar(itemsPorUrl);
+  const ahora = Date.now();
+  const lastUpdated = {};
+  for (const url of config.m3uUrls) lastUpdated[url] = ahora;
+
+  const entry = {
+    m3uUrls:         [...config.m3uUrls],
+    itemsPorUrl,
+    lastUpdated,
     movies,
     series,
     channels,
@@ -386,13 +416,113 @@ async function initData(config, configId) {
     apiKey:          config.tmdbApiKey || null,
     githubToken,
     githubRepo,
+    showChannels:    !!config.showChannels,
     configId,
     ready:           true
   };
-  console.log(`✅ Datos cargados y listos`);
-  prefetchTMDB(globalData).catch(err =>
-    console.error("❌ Error en pre-carga TMDB:", err)
+
+  aplicarOverrides(entry);
+  dataStore.set(configId, entry);
+
+  console.log(`✅ [${configId}] Datos cargados y listos`);
+  prefetchTMDB(entry).catch(err =>
+    console.error(`❌ [${configId}] Error en pre-carga TMDB:`, err)
   );
+}
+
+async function actualizarUnaLista(configId, oldUrl, newUrl) {
+  const entry = dataStore.get(configId);
+  if (!entry) throw new Error("config no encontrada");
+
+  const items = await descargarYParsear(newUrl);
+
+  if (oldUrl && oldUrl !== newUrl) delete entry.itemsPorUrl[oldUrl];
+  entry.itemsPorUrl[newUrl] = items;
+
+  if (oldUrl) {
+    const idx = entry.m3uUrls.indexOf(oldUrl);
+    if (idx !== -1) entry.m3uUrls[idx] = newUrl;
+    else if (!entry.m3uUrls.includes(newUrl)) entry.m3uUrls.push(newUrl);
+    if (oldUrl !== newUrl) delete entry.lastUpdated[oldUrl];
+  } else if (!entry.m3uUrls.includes(newUrl)) {
+    entry.m3uUrls.push(newUrl);
+  }
+  entry.lastUpdated[newUrl] = Date.now();
+
+  const { movies, series, channels } = reagrupar(entry.itemsPorUrl);
+  entry.movies = movies;
+  entry.series = series;
+  entry.channels = channels;
+  entry.movieImdbIndex = {};
+  entry.seriesImdbIndex = {};
+  aplicarOverrides(entry);
+
+  const rawConfig = configStore.get(configId);
+  if (rawConfig) {
+    rawConfig.m3uUrls = entry.m3uUrls;
+    persistConfigStore();
+  }
+
+  prefetchTMDB(entry).catch(err =>
+    console.error(`❌ [${configId}] Error en pre-carga TMDB tras actualizar lista:`, err)
+  );
+
+  return estadisticasDe(entry);
+}
+
+function quitarLista(configId, url) {
+  const entry = dataStore.get(configId);
+  if (!entry) throw new Error("config no encontrada");
+  if (entry.m3uUrls.length <= 1) throw new Error("no se puede quitar la unica lista de la configuracion");
+
+  delete entry.itemsPorUrl[url];
+  entry.m3uUrls = entry.m3uUrls.filter(u => u !== url);
+  delete entry.lastUpdated[url];
+
+  const { movies, series, channels } = reagrupar(entry.itemsPorUrl);
+  entry.movies = movies;
+  entry.series = series;
+  entry.channels = channels;
+  entry.movieImdbIndex = {};
+  entry.seriesImdbIndex = {};
+  aplicarOverrides(entry);
+
+  const rawConfig = configStore.get(configId);
+  if (rawConfig) {
+    rawConfig.m3uUrls = entry.m3uUrls;
+    persistConfigStore();
+  }
+
+  return estadisticasDe(entry);
+}
+
+function estadisticasDeUrl(entry, url) {
+  const items = entry.itemsPorUrl[url] || [];
+  let movies = 0, series = 0, channels = 0, sinClasificar = 0;
+  for (const item of items) {
+    const { type } = classifyItem(item);
+    if (type === "movie") movies++;
+    else if (type === "series") series++;
+    else if (type === "channel") channels++;
+    else sinClasificar++;
+  }
+  return {
+    url,
+    total: items.length,
+    movies, series, channels, sinClasificar,
+    lastUpdated: entry.lastUpdated[url] || null
+  };
+}
+
+function estadisticasDe(entry) {
+  return {
+    totales: {
+      movies:   entry.movies.length,
+      series:   Object.keys(entry.series).length,
+      channels: entry.channels.length
+    },
+    porLista: entry.m3uUrls.map(url => estadisticasDeUrl(entry, url))
+  };
 }
 
 const LOGO_SVG = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'>
@@ -419,6 +549,9 @@ app.get("/", (req, res) => res.redirect("/configure"));
 app.get("/configure", (req, res) => {
   res.sendFile(path.join(__dirname, "configure.html"));
 });
+app.get("/:configId/configure", (req, res) => {
+  res.sendFile(path.join(__dirname, "configure.html"));
+});
 
 app.post("/api/config", async (req, res) => {
   const { m3uUrls, tmdbApiKey, githubToken, githubRepo, showChannels } = req.body;
@@ -431,12 +564,137 @@ app.post("/api/config", async (req, res) => {
   if (githubRepo) config.githubRepo = githubRepo;
   if (showChannels) config.showChannels = true;
   const id = saveConfig(config);
-  if (id !== globalData.configId) {
+  if (!dataStore.has(id)) {
     initData(config, id).catch(err =>
-      console.error("❌ Error al recargar datos:", err)
+      console.error(`❌ [${id}] Error al cargar datos:`, err)
     );
   }
   res.json({ id });
+});
+
+
+app.get("/api/config/:configId", (req, res) => {
+  const { configId } = req.params;
+  const rawConfig = getConfig(configId);
+  const entry = dataStore.get(configId);
+  if (!rawConfig || !entry) return res.status(404).json({ error: "config not found" });
+  res.json({
+    configId,
+    m3uUrls:      entry.m3uUrls,
+    showChannels: !!entry.showChannels,
+    hasTmdbKey:   !!entry.apiKey,
+    hasGithub:    !!(entry.githubToken && entry.githubRepo),
+    ready:        entry.ready,
+    stats:        estadisticasDe(entry)
+  });
+});
+
+app.put("/api/config/:configId/settings", (req, res) => {
+  const { configId } = req.params;
+  const entry = dataStore.get(configId);
+  const rawConfig = getConfig(configId);
+  if (!entry || !rawConfig) return res.status(404).json({ error: "config not found" });
+  if (typeof req.body.showChannels === "boolean") {
+    entry.showChannels = req.body.showChannels;
+    rawConfig.showChannels = req.body.showChannels;
+    persistConfigStore();
+  }
+  res.json({ ok: true });
+});
+
+app.put("/api/config/:configId/list", async (req, res) => {
+  const { configId } = req.params;
+  const { oldUrl, newUrl } = req.body;
+  if (!newUrl || typeof newUrl !== "string") {
+    return res.status(400).json({ error: "falta newUrl" });
+  }
+  try {
+    const stats = await actualizarUnaLista(configId, oldUrl || null, newUrl.trim());
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.delete("/api/config/:configId/list", (req, res) => {
+  const { configId } = req.params;
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: "falta url" });
+  try {
+    const stats = quitarLista(configId, url);
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/config/:configId/tmdb-search", async (req, res) => {
+  const { configId } = req.params;
+  const entry = dataStore.get(configId);
+  if (!entry) return res.status(404).json({ error: "config not found" });
+  if (!entry.apiKey) return res.status(400).json({ error: "no tmdb key configured for this config" });
+
+  const q    = (req.query.q || "").toString().trim();
+  const tipo = req.query.tipo === "series" ? "series" : "movie";
+  if (!q) return res.status(400).json({ error: "missing q" });
+
+  const endpoint = tipo === "series" ? "tv" : "movie";
+  try {
+    const searchRes = await axios.get(`https://api.themoviedb.org/3/search/${endpoint}`, {
+      params: { api_key: entry.apiKey, query: q, language: "es-MX" },
+      timeout: 10000
+    });
+    const top = (searchRes.data.results || []).slice(0, 8);
+    const conImdb = await Promise.all(top.map(async r => {
+      try {
+        const detRes = await axios.get(`https://api.themoviedb.org/3/${endpoint}/${r.id}/external_ids`, {
+          params: { api_key: entry.apiKey },
+          timeout: 10000
+        });
+        const fecha = tipo === "series" ? r.first_air_date : r.release_date;
+        return {
+          tmdbId: r.id,
+          title:  tipo === "series" ? r.name : r.title,
+          year:   fecha ? fecha.slice(0, 4) : null,
+          poster: r.poster_path ? `https://image.tmdb.org/t/p/w200${r.poster_path}` : null,
+          imdbId: detRes.data.imdb_id || null
+        };
+      } catch {
+        return null;
+      }
+    }));
+    res.json({ resultados: conImdb.filter(r => r && r.imdbId) });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+app.post("/api/config/:configId/override", (req, res) => {
+  const { configId } = req.params;
+  const entry = dataStore.get(configId);
+  if (!entry) return res.status(404).json({ error: "config not found" });
+
+  const { tipo, titulo, imdbId } = req.body;
+  if (!["movie", "series"].includes(tipo)) {
+    return res.status(400).json({ error: "tipo debe ser movie o series" });
+  }
+  if (!titulo || typeof titulo !== "string") {
+    return res.status(400).json({ error: "falta titulo" });
+  }
+  if (!imdbId || !/^tt\d+$/.test(imdbId)) {
+    return res.status(400).json({ error: "imdbId invalido (formato esperado: tt1234567)" });
+  }
+
+  const existeEnCatalogo = tipo === "movie"
+    ? entry.movies.some(m => normalize(m.title) === normalize(titulo))
+    : Object.values(entry.series).some(s => normalize(s.title) === normalize(titulo));
+  if (!existeEnCatalogo) {
+    return res.status(404).json({ error: "no se encontro ese titulo exacto en el catalogo actual" });
+  }
+
+  guardarOverride(configId, tipo, titulo, imdbId);
+  aplicarOverrides(entry);
+  res.json({ ok: true });
 });
 
 app.get("/manifest.json", (req, res) => {
@@ -482,9 +740,6 @@ app.get("/:configId/manifest.json", (req, res) => {
   ];
   const types = ["movie", "series"];
 
-  // El catalogo de canales solo se agrega si esta persona lo activo al
-  // configurar -- por defecto el addon se queda solo con contenido VOD
-  // (peliculas/series), como venia siendo siempre.
   if (config.showChannels) {
     types.push("tv");
     catalogs.push({
@@ -502,7 +757,7 @@ app.get("/:configId/manifest.json", (req, res) => {
     resources:   ["catalog", "stream", "meta"],
     types,
     catalogs,
-    behaviorHints: { configurable: true, configureUrl: `${baseUrl}/configure` },
+    behaviorHints: { configurable: true, configureUrl: `${baseUrl}/${req.params.configId}/configure` },
     stremioAddonsConfig: {
       issuer:    "https://stremio-addons.net",
       signature: STREMIO_SIGNATURE
@@ -513,19 +768,19 @@ app.get("/:configId/manifest.json", (req, res) => {
 app.get("/:configId/catalog/:type/:id.json",        handleCatalog);
 app.get("/:configId/catalog/:type/:id/:extra.json", handleCatalog);
 
-async function handleCatalog(req, res) {
+function handleCatalog(req, res) {
   try {
-    if (!getConfig(req.params.configId)) return res.json({ metas: [] });
-    if (!globalData.ready)               return res.json({ metas: [] });
+    const entry = dataStore.get(req.params.configId);
+    if (!entry || !entry.ready) return res.json({ metas: [] });
     const { type, id } = req.params;
-    const extra  = req.params.extra
+    const extra = req.params.extra
       ? Object.fromEntries(new URLSearchParams(req.params.extra))
       : {};
     const search = extra.search ? normalize(extra.search) : null;
     const skip   = parseInt(extra.skip || "0", 10);
     const PAGE   = 100;
     if (type === "movie" && id === "m3u_movies") {
-      let results = globalData.movies;
+      let results = entry.movies;
       if (search) results = results.filter(m => normalize(m.title).includes(search));
       return res.json({
         metas: results.slice(skip, skip + PAGE).map(m => ({
@@ -534,7 +789,7 @@ async function handleCatalog(req, res) {
       });
     }
     if (type === "series" && id === "m3u_series") {
-      let results = Object.values(globalData.series);
+      let results = Object.values(entry.series);
       if (search) results = results.filter(s => normalize(s.title).includes(search));
       return res.json({
         metas: results.slice(skip, skip + PAGE).map(s => ({
@@ -543,7 +798,7 @@ async function handleCatalog(req, res) {
       });
     }
     if (type === "tv" && id === "m3u_channels") {
-      let results = globalData.channels;
+      let results = entry.channels;
       if (search) results = results.filter(c => normalize(c.title).includes(search));
       return res.json({
         metas: results.slice(skip, skip + PAGE).map(c => ({
@@ -560,10 +815,10 @@ async function handleCatalog(req, res) {
 
 app.get("/:configId/meta/:type/:id.json", async (req, res) => {
   try {
-    if (!getConfig(req.params.configId)) return res.json({ meta: null });
-    if (!globalData.ready)               return res.json({ meta: null });
+    const entry = dataStore.get(req.params.configId);
+    if (!entry || !entry.ready) return res.json({ meta: null });
     const { type, id } = req.params;
-    const { movies, series, tmdbCache, movieImdbIndex, seriesImdbIndex, apiKey } = globalData;
+    const { movies, series, tmdbCache, movieImdbIndex, seriesImdbIndex, apiKey } = entry;
     if (type === "movie") {
       const slugKey = movieImdbIndex[id] || id;
       let movie = movies.find(m => m.id === id || m.id === slugKey)
@@ -599,11 +854,8 @@ app.get("/:configId/meta/:type/:id.json", async (req, res) => {
       });
     }
     if (type === "tv") {
-      // los canales no pasan por TMDB (no hay forma de matchear un canal
-      // de tv en vivo contra una pelicula/serie), el id se queda tal
-      // cual se armo al agrupar
-      const channel = globalData.channels.find(c => c.id === id)
-        || globalData.channels.find(c => normalize(c.title) === normalize(id));
+      const channel = entry.channels.find(c => c.id === id)
+        || entry.channels.find(c => normalize(c.title) === normalize(id));
       if (!channel) return res.json({ meta: null });
       return res.json({
         meta: { id: channel.id, type: "tv", name: channel.title, poster: channel.poster }
@@ -618,10 +870,10 @@ app.get("/:configId/meta/:type/:id.json", async (req, res) => {
 
 app.get("/:configId/stream/:type/:id.json", async (req, res) => {
   try {
-    if (!getConfig(req.params.configId)) return res.json({ streams: [] });
-    if (!globalData.ready)               return res.json({ streams: [] });
+    const entry = dataStore.get(req.params.configId);
+    if (!entry || !entry.ready) return res.json({ streams: [] });
     const { type, id } = req.params;
-    const { movies, series, movieImdbIndex, seriesImdbIndex } = globalData;
+    const { movies, series, movieImdbIndex, seriesImdbIndex } = entry;
     if (type === "movie") {
       const slugKey = movieImdbIndex[id] || id;
       const movie = movies.find(m => m.id === id || m.id === slugKey)
@@ -654,8 +906,8 @@ app.get("/:configId/stream/:type/:id.json", async (req, res) => {
       });
     }
     if (type === "tv") {
-      const channel = globalData.channels.find(c => c.id === id)
-        || globalData.channels.find(c => normalize(c.title) === normalize(id));
+      const channel = entry.channels.find(c => c.id === id)
+        || entry.channels.find(c => normalize(c.title) === normalize(id));
       if (!channel) return res.json({ streams: [] });
       return res.json({
         streams: channel.streams.map((s, i) => ({
@@ -670,10 +922,6 @@ app.get("/:configId/stream/:type/:id.json", async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────
-// KEEP-ALIVE — ping cada 14 min para evitar que
-// Render duerma el servicio en plan gratuito
-// ─────────────────────────────────────────────
 
 function startKeepAlive(baseUrl) {
   setInterval(async () => {
@@ -689,7 +937,6 @@ function startKeepAlive(baseUrl) {
 app.listen(PORT, async () => {
   console.log(`🚀 M3U IPTV corriendo en http://localhost:${PORT}`);
 
-  // Prioridad 1: variables de entorno de Render
   const envUrls = process.env.M3U_URLS
     ? process.env.M3U_URLS.split(",").map(u => u.trim()).filter(Boolean)
     : process.env.M3U_URL
@@ -703,31 +950,20 @@ app.listen(PORT, async () => {
     if (process.env.GITHUB_REPO)  config.githubRepo  = process.env.GITHUB_REPO;
     if (process.env.SHOW_CHANNELS === "true") config.showChannels = true;
     const id = saveConfig(config);
-    await initData(config, id);
-
-    const publicUrl = process.env.RENDER_EXTERNAL_URL;
-    if (publicUrl) {
-      console.log(`💓 Keep-alive iniciado: ${publicUrl}`);
-      startKeepAlive(publicUrl);
-    }
-    return;
+    initData(config, id).catch(err => console.error(`❌ [${id}] Error al cargar datos:`, err));
   }
 
-  // Prioridad 2: última config guardada en disco (sobrevive reinicios)
   if (configStore.size > 0) {
-    const [lastId, lastConfig] = [...configStore.entries()].pop();
-    console.log(`🔁 Restaurando config guardada (${lastId})...`);
-    await initData(lastConfig, lastId);
-
-    const publicUrl = process.env.RENDER_EXTERNAL_URL;
-    if (publicUrl) {
-      console.log(`💓 Keep-alive iniciado: ${publicUrl}`);
-      startKeepAlive(publicUrl);
+    console.log(`🔁 Restaurando ${configStore.size} configuracion(es) guardada(s)...`);
+    for (const [id, cfg] of configStore.entries()) {
+      if (dataStore.has(id)) continue;
+      initData(cfg, id).catch(err => console.error(`❌ [${id}] Error al restaurar:`, err));
     }
-    return;
   }
 
-  console.log("⚠️  Sin listas configuradas — configura desde /configure");
+  if (!envUrls.length && configStore.size === 0) {
+    console.log("⚠️  Sin listas configuradas — configura desde /configure");
+  }
 
   const publicUrl = process.env.RENDER_EXTERNAL_URL;
   if (publicUrl) {

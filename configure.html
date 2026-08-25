@@ -408,6 +408,94 @@ textarea:focus, input:focus { border-color: #333; }
   font-size: 12px;
   color: #555;
 }
+
+
+.url-row-btn {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: #aaa;
+  border-radius: 7px;
+  padding: 0 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.url-row-btn:hover { background: #222; color: #fff; }
+.url-row-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.list-row {
+  border: 1px solid #1a1a1a;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.list-row-top { display: flex; gap: 8px; margin-bottom: 6px; }
+
+.list-row-top input {
+  flex: 1;
+  background: #0a0a0a;
+  border: 1px solid #1a1a1a;
+  border-radius: 7px;
+  color: #00d4ff;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 8px 10px;
+  outline: none;
+  min-width: 0;
+}
+
+.list-stats {
+  font-size: 11px;
+  color: #555;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.list-stats b { color: #999; font-weight: 600; }
+
+.list-remove-btn {
+  background: none;
+  border: none;
+  color: #663333;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.list-remove-btn:hover { color: #e05a5a; }
+
+.tmdb-result {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #1a1a1a;
+  border-radius: 8px;
+  padding: 8px;
+  margin-top: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.tmdb-result:hover { border-color: #333; background: #111; }
+.tmdb-result.selected { border-color: #00d4ff; background: #0a1a1f; }
+
+.tmdb-result img {
+  width: 40px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #1a1a1a;
+  flex-shrink: 0;
+}
+
+.tmdb-result-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tmdb-result-title { font-size: 13px; color: #e0e0e0; font-weight: 600; }
+.tmdb-result-year { font-size: 11px; color: #555; }
+.tmdb-result-imdb { font-size: 10px; color: #444; font-family: monospace; }
+
+.small-note { font-size: 11px; color: #444; margin: 8px 0; }
 </style>
 </head>
 <body>
@@ -425,6 +513,8 @@ textarea:focus, input:focus { border-color: #333; }
       <p data-i18n="subtitle">Stremio Addon</p>
     </div>
   </div>
+
+  <div id="setupPanel">
 
   <div class="support-bar">
     <a class="support-btn" href="https://github.com/Esmequiinn" target="_blank">GitHub</a>
@@ -511,13 +601,97 @@ textarea:focus, input:focus { border-color: #333; }
     </div>
     <a class="install" id="stremioLink" href="#" data-i18n="openInStremio">Open in Stremio</a>
   </div>
+
+  </div>
+
+  <div id="managePanel" style="display:none;">
+
+    <p class="hint" id="manageLoading" data-i18n="loadingConfig">Loading your configuration...</p>
+    <div class="error" id="manageLoadError"></div>
+
+    <div id="manageContent" style="display:none;">
+
+    <p class="section-label" id="manageIntro" data-i18n="manageIntro">
+      A title matched wrong? Fix it here. This page is private to your
+      install link -- only someone with this exact link can see or change it.
+    </p>
+
+    <p class="section-label" data-i18n="manageListsLabel">Your lists</p>
+    <div id="manageLists"></div>
+    <div class="field" style="display:flex; gap:8px; margin-bottom: 18px;">
+      <input type="url" id="newListUrl" data-i18n-placeholder="newListPlaceholder" placeholder="https://..." style="flex:1;">
+      <button type="button" class="url-row-btn" id="addListBtn" onclick="agregarLista()" data-i18n="addListBtn">Add</button>
+    </div>
+    <div class="error" id="listError"></div>
+
+    <hr class="divider">
+
+    <label class="checkbox-field" for="showChannelsManage">
+      <input type="checkbox" id="showChannelsManage" onchange="guardarShowChannels()">
+      <span class="checkbox-text">
+        <span class="checkbox-title" data-i18n="showChannelsTitle">Show TV channels</span>
+        <span class="checkbox-desc" data-i18n="showChannelsDesc">Off by default — only movies and series are shown. Turn this on to also get a "My Channels" catalog with the live TV channels from your list.</span>
+      </span>
+    </label>
+
+    <hr class="divider">
+
+    <p class="section-label" data-i18n="fixTitleLabel">Fix a title</p>
+    <p class="hint" data-i18n="fixTitleHint" style="margin-top:-10px; margin-bottom:14px;">
+      If a movie or series matched the wrong poster or info, correct it here.
+      Choose what it is, type the exact name as it shows in your list, then
+      search and pick the right match -- no need to look up any code
+      elsewhere.
+    </p>
+
+    <div class="field">
+      <label data-i18n="fixTypeLabel">Type</label>
+      <div class="tabs" style="margin-bottom:0;">
+        <button type="button" class="tab active" id="fixTypeMovie" onclick="elegirTipoFix('movie')" data-i18n="fixTypeMovie">Movie</button>
+        <button type="button" class="tab" id="fixTypeSeries" onclick="elegirTipoFix('series')" data-i18n="fixTypeSeries">Series</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label><span data-i18n="fixTitleInputLabel">Exact title in your list</span> <span class="tag req" data-i18n="required">required</span></label>
+      <input type="text" id="fixTitleInput" data-i18n-placeholder="fixTitleInputPlaceholder" placeholder="e.g. Breaking Bad">
+    </div>
+
+    <div class="field" style="display:flex; gap:8px;">
+      <input type="text" id="fixSearchInput" data-i18n-placeholder="fixSearchPlaceholder" placeholder="Search TMDB by name...">
+      <button type="button" class="url-row-btn" id="fixSearchBtn" onclick="buscarTMDB()" data-i18n="fixSearchBtn">Search</button>
+    </div>
+    <p class="hint" id="fixNoKeyHint" data-i18n="fixNoKeyHint" style="display:none;">
+      No TMDB key was set for this configuration -- add one from the
+      original setup form to be able to search here.
+    </p>
+
+    <div id="fixResults"></div>
+
+    <div id="fixSelected" style="display:none;"></div>
+
+    <button class="btn" id="fixSaveBtn" onclick="guardarOverride()" disabled data-i18n="fixSaveBtn">Save correction</button>
+    <div class="error" id="fixError"></div>
+    <div class="result" id="fixSuccess">
+      <p data-i18n="fixSuccessMsg">Saved. This title will use the new match from now on.</p>
+    </div>
+
+    <hr class="divider">
+
+    <p class="section-label" data-i18n="reinstallLabel">Install link</p>
+    <div class="url-row">
+      <input type="text" id="manageManifestUrl" readonly>
+      <button id="manageCopyBtn" onclick="copyManageUrl()" data-i18n="copyBtn">Copy</button>
+    </div>
+    <a class="install" id="manageStremioLink" href="#" data-i18n="openInStremio">Open in Stremio</a>
+
+    </div>
+
+  </div>
+
 </div>
 
 <script>
-// ─────────────────────────────────────────────
-// TRADUCCIONES
-// El español va sin acentos a proposito, neutro
-// ─────────────────────────────────────────────
 const I18N = {
   en: {
     subtitle: "Stremio Addon",
@@ -564,7 +738,48 @@ const I18N = {
     errNoPass: "Please enter the password in list",
     errBadServer: "Server URL must start with http:// or https:// in list",
     errServerError: "Something went wrong. Please try again.",
-    langToggle: "Español"
+    langToggle: "Español",
+
+    manageIntro: "A title matched wrong? Fix it here. This page is private to your install link -- only someone with this exact link can see or change it.",
+    manageListsLabel: "Your lists",
+    newListPlaceholder: "https://... (add another list)",
+    addListBtn: "Add",
+    listUpdateBtn: "Update",
+    listUpdatingBtn: "Updating...",
+    listRemoveConfirm: "Remove this list?",
+    listStatsMovies: "movies",
+    listStatsSeries: "series episodes",
+    listStatsChannels: "channels",
+    listStatsUnknown: "not classified",
+    listStatsUpdated: "Last updated",
+    listStatsNever: "just now",
+    listErrEmpty: "Enter a URL first.",
+    listErrLast: "You need at least one list -- add a new one before removing this.",
+    listErrGeneric: "Could not load that list. Check the URL and try again.",
+    fixTitleLabel: "Fix a title",
+    fixTitleHint: "If a movie or series matched the wrong poster or info, correct it here. Choose what it is, type the exact name as it shows in your list, then search and pick the right match -- no need to look up any code elsewhere.",
+    fixTypeLabel: "Type",
+    fixTypeMovie: "Movie",
+    fixTypeSeries: "Series",
+    fixTitleInputLabel: "Exact title in your list",
+    fixTitleInputPlaceholder: "e.g. Breaking Bad",
+    fixSearchPlaceholder: "Search TMDB by name...",
+    fixSearchBtn: "Search",
+    fixSearching: "Searching...",
+    fixNoKeyHint: "No TMDB key was set for this configuration -- add one from the original setup form to be able to search here.",
+    fixNoResults: "No results found. Try a different spelling.",
+    fixSelectedLabel: "Selected match",
+    fixSaveBtn: "Save correction",
+    fixSaving: "Saving...",
+    fixSuccessMsg: "Saved. This title will use the new match from now on.",
+    fixErrNoTitle: "Enter the exact title first.",
+    fixErrNoMatch: "Search and pick a match first.",
+    fixErrNotFound: "That exact title was not found in your current catalog -- check the spelling matches your list.",
+    fixSearchErrGeneric: "Could not search TMDB. Try again.",
+    fixErrGeneric: "Could not save the correction. Try again.",
+    reinstallLabel: "Install link",
+    loadingConfig: "Loading your configuration...",
+    loadErrConfig: "Could not find this configuration. The link may be wrong or the addon may have been reset."
   },
   es: {
     subtitle: "Addon de Stremio",
@@ -611,7 +826,48 @@ const I18N = {
     errNoPass: "Falta la contrasena en la lista",
     errBadServer: "La URL del servidor tiene que empezar con http:// o https:// en la lista",
     errServerError: "Algo salio mal. Intenta de nuevo.",
-    langToggle: "English"
+    langToggle: "English",
+
+    manageIntro: "Un titulo se resolvio mal? Arreglalo aqui. Esta pagina es privada de tu link de instalacion -- solo alguien con este link exacto puede verla o cambiarla.",
+    manageListsLabel: "Tus listas",
+    newListPlaceholder: "https://... (agregar otra lista)",
+    addListBtn: "Agregar",
+    listUpdateBtn: "Actualizar",
+    listUpdatingBtn: "Actualizando...",
+    listRemoveConfirm: "Quitar esta lista?",
+    listStatsMovies: "peliculas",
+    listStatsSeries: "episodios de series",
+    listStatsChannels: "canales",
+    listStatsUnknown: "sin clasificar",
+    listStatsUpdated: "Ultima actualizacion",
+    listStatsNever: "recien ahora",
+    listErrEmpty: "Escribe una URL primero.",
+    listErrLast: "Necesitas al menos una lista -- agrega una nueva antes de quitar esta.",
+    listErrGeneric: "No se pudo cargar esa lista. Revisa la URL e intenta de nuevo.",
+    fixTitleLabel: "Arreglar un titulo",
+    fixTitleHint: "Si una pelicula o serie tomo el poster o los datos equivocados, corregilo aqui. Elegi que es, escribe el nombre exacto tal como aparece en tu lista, y despues buscalo y elegi el resultado correcto -- no hace falta buscar ningun codigo en otro lado.",
+    fixTypeLabel: "Tipo",
+    fixTypeMovie: "Pelicula",
+    fixTypeSeries: "Serie",
+    fixTitleInputLabel: "Titulo exacto en tu lista",
+    fixTitleInputPlaceholder: "ej: Breaking Bad",
+    fixSearchPlaceholder: "Buscar en TMDB por nombre...",
+    fixSearchBtn: "Buscar",
+    fixSearching: "Buscando...",
+    fixNoKeyHint: "Esta configuracion no tiene una clave de TMDB cargada -- agrega una desde el formulario original de configuracion para poder buscar aqui.",
+    fixNoResults: "No se encontraron resultados. Proba con otra forma de escribirlo.",
+    fixSelectedLabel: "Resultado elegido",
+    fixSaveBtn: "Guardar correccion",
+    fixSaving: "Guardando...",
+    fixSuccessMsg: "Guardado. Este titulo va a usar el nuevo resultado de ahora en mas.",
+    fixErrNoTitle: "Escribe el titulo exacto primero.",
+    fixErrNoMatch: "Busca y elegi un resultado primero.",
+    fixErrNotFound: "Ese titulo exacto no se encontro en tu catalogo actual -- revisa que este escrito igual que en tu lista.",
+    fixSearchErrGeneric: "No se pudo buscar en TMDB. Intenta de nuevo.",
+    fixErrGeneric: "No se pudo guardar la correccion. Intenta de nuevo.",
+    reinstallLabel: "Link de instalacion",
+    loadingConfig: "Cargando tu configuracion...",
+    loadErrConfig: "No se encontro esta configuracion. El link puede estar mal, o el addon puede haberse reiniciado desde cero."
   }
 };
 
@@ -639,9 +895,6 @@ function toggleLang() {
   applyLang(currentLang === 'en' ? 'es' : 'en');
 }
 
-// ─────────────────────────────────────────────
-// TABS
-// ─────────────────────────────────────────────
 let activeTab = 'm3u';
 
 function switchTab(tab) {
@@ -654,9 +907,6 @@ function switchTab(tab) {
   document.getElementById('result').style.display = 'none';
 }
 
-// ─────────────────────────────────────────────
-// XTREAM — varias listas, con un + para agregar mas
-// ─────────────────────────────────────────────
 let xtreamSetCount = 0;
 
 function addXtreamSet() {
@@ -705,7 +955,6 @@ function renumberXtreamSets() {
 }
 
 function updateRemoveButtons() {
-  // no dejamos sacar la ultima lista que queda -- siempre tiene que haber al menos una
   const sets = document.querySelectorAll('.xtream-set');
   sets.forEach(s => {
     const btn = s.querySelector('.remove-set-btn');
@@ -713,7 +962,7 @@ function updateRemoveButtons() {
   });
 }
 
-addXtreamSet(); // arranca con una lista lista para llenar
+addXtreamSet();
 
 function showError(msg) {
   const el = document.getElementById('errorMsg');
@@ -795,6 +1044,304 @@ function copyUrl() {
     setTimeout(() => btn.textContent = dict.copyBtn, 2000);
   });
 }
+
+
+let manageConfigId = null;
+let fixTipo = 'movie';
+let fixResultadoElegido = null;
+let ultimoStats = null;
+
+function detectarModoGestion() {
+  const m = window.location.pathname.match(/^\/([a-f0-9]{12})\/configure\/?$/);
+  return m ? m[1] : null;
+}
+
+function formatFecha(ts) {
+  if (!ts) return I18N[currentLang].listStatsNever;
+  return new Date(ts).toLocaleString();
+}
+
+async function iniciarModoGestion() {
+  manageConfigId = detectarModoGestion();
+  if (!manageConfigId) return;
+
+  document.getElementById('setupPanel').style.display = 'none';
+  document.getElementById('managePanel').style.display = 'block';
+
+  try {
+    const res = await fetch(`/api/config/${manageConfigId}`);
+    if (!res.ok) throw new Error('not found');
+    const data = await res.json();
+    aplicarConfigAlFormulario(data);
+    document.getElementById('manageLoading').style.display = 'none';
+    document.getElementById('manageContent').style.display = 'block';
+  } catch (e) {
+    document.getElementById('manageLoading').style.display = 'none';
+    document.getElementById('manageLoadError').textContent = I18N[currentLang].loadErrConfig;
+    document.getElementById('manageLoadError').style.display = 'block';
+  }
+}
+
+function aplicarConfigAlFormulario(data) {
+  ultimoStats = data.stats;
+  document.getElementById('showChannelsManage').checked = !!data.showChannels;
+  if (!data.hasTmdbKey) {
+    document.getElementById('fixNoKeyHint').style.display = 'block';
+    document.getElementById('fixSearchBtn').disabled = true;
+    document.getElementById('fixSearchInput').disabled = true;
+  }
+
+  const manifestUrl = `${window.location.origin}/${manageConfigId}/manifest.json`;
+  document.getElementById('manageManifestUrl').value = manifestUrl;
+  document.getElementById('manageStremioLink').href = 'stremio://' + manifestUrl.replace(/^https?:\/\//, '');
+
+  renderListas(data.stats.porLista);
+}
+
+function statLinea(st) {
+  const dict = I18N[currentLang];
+  const partes = [
+    `<b>${st.movies}</b> ${dict.listStatsMovies}`,
+    `<b>${st.series}</b> ${dict.listStatsSeries}`,
+    `<b>${st.channels}</b> ${dict.listStatsChannels}`
+  ];
+  if (st.sinClasificar) partes.push(`<b>${st.sinClasificar}</b> ${dict.listStatsUnknown}`);
+  partes.push(`${dict.listStatsUpdated}: ${formatFecha(st.lastUpdated)}`);
+  return partes.join(' &middot; ');
+}
+
+function renderListas(porLista) {
+  const dict = I18N[currentLang];
+  const cont = document.getElementById('manageLists');
+  const puedeQuitar = porLista.length > 1;
+  cont.innerHTML = porLista.map((st, i) => `
+    <div class="list-row" data-original-url="${st.url.replace(/"/g, '&quot;')}">
+      <div class="list-row-top">
+        <input type="url" class="list-url-input" value="${st.url.replace(/"/g, '&quot;')}">
+        <button type="button" class="url-row-btn" onclick="actualizarListaUI(this)">${dict.listUpdateBtn}</button>
+        <button type="button" class="list-remove-btn" onclick="quitarListaUI(this)" ${puedeQuitar ? '' : 'style="visibility:hidden;"'}>&times;</button>
+      </div>
+      <div class="list-stats">${statLinea(st)}</div>
+    </div>
+  `).join('');
+}
+
+async function actualizarListaUI(btn) {
+  const dict = I18N[currentLang];
+  const row = btn.closest('.list-row');
+  const oldUrl = row.getAttribute('data-original-url');
+  const input = row.querySelector('.list-url-input');
+  const newUrl = input.value.trim();
+  document.getElementById('listError').style.display = 'none';
+
+  if (!newUrl) {
+    document.getElementById('listError').textContent = dict.listErrEmpty;
+    document.getElementById('listError').style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = dict.listUpdatingBtn;
+  try {
+    const res = await fetch(`/api/config/${manageConfigId}/list`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldUrl, newUrl })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'error');
+    ultimoStats = data.stats;
+    renderListas(data.stats.porLista);
+  } catch (e) {
+    document.getElementById('listError').textContent = dict.listErrGeneric;
+    document.getElementById('listError').style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = dict.listUpdateBtn;
+  }
+}
+
+async function agregarLista() {
+  const dict = I18N[currentLang];
+  const input = document.getElementById('newListUrl');
+  const url = input.value.trim();
+  document.getElementById('listError').style.display = 'none';
+  if (!url) {
+    document.getElementById('listError').textContent = dict.listErrEmpty;
+    document.getElementById('listError').style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('addListBtn');
+  btn.disabled = true;
+  btn.textContent = dict.listUpdatingBtn;
+  try {
+    const res = await fetch(`/api/config/${manageConfigId}/list`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newUrl: url })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'error');
+    ultimoStats = data.stats;
+    renderListas(data.stats.porLista);
+    input.value = '';
+  } catch (e) {
+    document.getElementById('listError').textContent = dict.listErrGeneric;
+    document.getElementById('listError').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = dict.addListBtn;
+  }
+}
+
+async function quitarListaUI(btn) {
+  const dict = I18N[currentLang];
+  const row = btn.closest('.list-row');
+  const url = row.getAttribute('data-original-url');
+  if (!confirm(dict.listRemoveConfirm)) return;
+  document.getElementById('listError').style.display = 'none';
+  try {
+    const res = await fetch(`/api/config/${manageConfigId}/list`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'error');
+    ultimoStats = data.stats;
+    renderListas(data.stats.porLista);
+  } catch (e) {
+    document.getElementById('listError').textContent = e.message === 'no se puede quitar la unica lista de la configuracion'
+      ? dict.listErrLast
+      : dict.listErrGeneric;
+    document.getElementById('listError').style.display = 'block';
+  }
+}
+
+async function guardarShowChannels() {
+  const checked = document.getElementById('showChannelsManage').checked;
+  try {
+    await fetch(`/api/config/${manageConfigId}/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showChannels: checked })
+    });
+  } catch (e) {  }
+}
+
+function elegirTipoFix(tipo) {
+  fixTipo = tipo;
+  document.getElementById('fixTypeMovie').classList.toggle('active', tipo === 'movie');
+  document.getElementById('fixTypeSeries').classList.toggle('active', tipo === 'series');
+  fixResultadoElegido = null;
+  document.getElementById('fixSelected').style.display = 'none';
+  document.getElementById('fixSaveBtn').disabled = true;
+}
+
+async function buscarTMDB() {
+  const dict = I18N[currentLang];
+  const q = document.getElementById('fixSearchInput').value.trim();
+  document.getElementById('fixError').style.display = 'none';
+  const cont = document.getElementById('fixResults');
+  if (!q) { cont.innerHTML = ''; return; }
+
+  const btn = document.getElementById('fixSearchBtn');
+  btn.disabled = true;
+  btn.textContent = dict.fixSearching;
+  try {
+    const res = await fetch(`/api/config/${manageConfigId}/tmdb-search?tipo=${fixTipo}&q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'error');
+    const resultados = data.resultados || [];
+    if (!resultados.length) {
+      cont.innerHTML = `<p class="small-note">${dict.fixNoResults}</p>`;
+      return;
+    }
+    cont.innerHTML = resultados.map((r, i) => `
+      <div class="tmdb-result" data-idx="${i}" onclick="seleccionarResultado(${i})">
+        <img src="${r.poster || ''}" onerror="this.style.visibility='hidden'">
+        <div class="tmdb-result-info">
+          <span class="tmdb-result-title">${r.title}</span>
+          <span class="tmdb-result-year">${r.year || ''}</span>
+          <span class="tmdb-result-imdb">${r.imdbId}</span>
+        </div>
+      </div>
+    `).join('');
+    window._fixResultadosActuales = resultados;
+  } catch (e) {
+    document.getElementById('fixError').textContent = dict.fixSearchErrGeneric;
+    document.getElementById('fixError').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = dict.fixSearchBtn;
+  }
+}
+
+function seleccionarResultado(idx) {
+  const dict = I18N[currentLang];
+  fixResultadoElegido = window._fixResultadosActuales[idx];
+  document.querySelectorAll('.tmdb-result').forEach((el, i) => {
+    el.classList.toggle('selected', i === idx);
+  });
+  const sel = document.getElementById('fixSelected');
+  sel.style.display = 'block';
+  sel.innerHTML = `
+    <p class="hint"><b>${dict.fixSelectedLabel}:</b> ${fixResultadoElegido.title}
+    (${fixResultadoElegido.year || '?'}) -- ${fixResultadoElegido.imdbId}</p>
+  `;
+  document.getElementById('fixSaveBtn').disabled = false;
+}
+
+async function guardarOverride() {
+  const dict = I18N[currentLang];
+  const titulo = document.getElementById('fixTitleInput').value.trim();
+  document.getElementById('fixError').style.display = 'none';
+  document.getElementById('fixSuccess').style.display = 'none';
+
+  if (!titulo) {
+    document.getElementById('fixError').textContent = dict.fixErrNoTitle;
+    document.getElementById('fixError').style.display = 'block';
+    return;
+  }
+  if (!fixResultadoElegido) {
+    document.getElementById('fixError').textContent = dict.fixErrNoMatch;
+    document.getElementById('fixError').style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('fixSaveBtn');
+  btn.disabled = true;
+  btn.textContent = dict.fixSaving;
+  try {
+    const res = await fetch(`/api/config/${manageConfigId}/override`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: fixTipo, titulo, imdbId: fixResultadoElegido.imdbId })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'error');
+    document.getElementById('fixSuccess').style.display = 'block';
+  } catch (e) {
+    document.getElementById('fixError').textContent =
+      /no se encontro ese titulo/.test(e.message) ? dict.fixErrNotFound : dict.fixErrGeneric;
+    document.getElementById('fixError').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = dict.fixSaveBtn;
+  }
+}
+
+function copyManageUrl() {
+  const input = document.getElementById('manageManifestUrl');
+  const dict = I18N[currentLang];
+  input.select();
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = document.getElementById('manageCopyBtn');
+    btn.textContent = dict.copiedBtn;
+    setTimeout(() => btn.textContent = dict.copyBtn, 2000);
+  });
+}
+
+iniciarModoGestion();
 </script>
 
 </body>
